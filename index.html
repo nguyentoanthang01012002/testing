@@ -1,88 +1,87 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cat Island: 3D Farm</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #87CEEB; } /* Bầu trời xanh */
-        #ui-layer { 
-            position: absolute; top: 15px; left: 15px; 
-            color: white; font-family: sans-serif; font-size: 22px; 
-            font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.6); 
-        }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-</head>
-<body>
-    <div id="ui-layer">Nông Trại Đảo Mèo 🐾 <br> Vàng: 100 🪙</div>
-    
-    <script>
-        // 1. TẠO SÂN KHẤU VÀ GÓC NHÌN (ISOMETRIC 2.5D giống game)
+// 1. CÀI ĐẶT CƠ BẢN
         const scene = new THREE.Scene();
         const aspect = window.innerWidth / window.innerHeight;
-        const d = 10;
+        const d = 15;
         const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
-        camera.position.set(20, 20, 20); // Đặt camera nhìn chéo từ trên xuống
-        camera.lookAt(scene.position);
+        camera.position.set(20, 20, 20);
+        camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 2. BẬT ĐÈN SÁNG MẶT TRỜI
         const light = new THREE.DirectionalLight(0xffffff, 1.2);
         light.position.set(10, 20, 10);
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-        // 3. CÔNG CỤ TẢI FILE GAME
+        // 2. TẢI TÀI NGUYÊN
         const objLoader = new THREE.OBJLoader();
         const texLoader = new THREE.TextureLoader();
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
-        // --- A. TRIỆU HỒI MẶT ĐẤT ---
+        let catModel;
+        const farmTiles = []; // Chứa danh sách các ô đất
+
+        // Tải Texture
         const groundTex = texLoader.load('SandNoise02.png');
         const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
-
-        objLoader.load('TileTest3X3_02.obj', function (object) {
-            object.traverse(function (child) {
-                if (child.isMesh) child.material = groundMat; // Mặc áo cát cho đất
-            });
-            object.scale.set(3, 3, 3); // Phóng to đất
-            object.position.set(0, 0, 0); // Đặt ở trung tâm
-            scene.add(object);
-        });
-
-        // --- B. TRIỆU HỒI BÉ MÈO ---
-        // (LƯU Ý: Nếu tên file mèo của bác khác, hãy sửa lại ở 2 dòng dưới đây nhé)
-        const catTex = texLoader.load('PC0017_Tex.png'); 
+        const catTex = texLoader.load('PC0017_Tex.png');
         const catMat = new THREE.MeshLambertMaterial({ map: catTex });
 
-        objLoader.load('PC0017.obj', function (object) {
-            object.traverse(function (child) {
-                if (child.isMesh) child.material = catMat; // Mặc áo lông cho mèo
-            });
-            object.scale.set(2, 2, 2); // Kích thước mèo
-            object.position.set(0, 1, 0); // Nhấc mèo lên cao 1 chút để không bị lún xuống đất
-            scene.add(object);
+        // --- TẠO LƯỚI ĐẤT 3x3 ---
+        objLoader.load('TileTest3X3_02.obj', function (object) {
+            const spacing = 3.5; // Khoảng cách giữa các ô
+            for (let x = -1; x <= 1; x++) {
+                for (let z = -1; z <= 1; z++) {
+                    const tile = object.clone();
+                    tile.traverse(function (child) {
+                        if (child.isMesh) child.material = groundMat;
+                    });
+                    tile.scale.set(3, 3, 3);
+                    tile.position.set(x * spacing, 0, z * spacing);
+                    scene.add(tile);
+                    farmTiles.push(tile); // Lưu vào danh sách để bắt click
+                }
+            }
         });
 
-        // 4. VÒNG LẶP KHUNG HÌNH
+        // --- TẢI MÈO ---
+        objLoader.load('PC0017.obj', function (object) {
+            object.traverse(function (child) {
+                if (child.isMesh) child.material = catMat;
+            });
+            object.scale.set(2, 2, 2);
+            object.position.set(0, 0.5, 0);
+            catModel = object;
+            scene.add(catModel);
+        });
+
+        // 3. XỬ LÝ CLICK CHUỘT ĐỂ DI CHUYỂN
+        window.addEventListener('click', (event) => {
+            // Chuyển tọa độ chuột
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(farmTiles, true);
+
+            if (intersects.length > 0 && catModel) {
+                // Lấy vị trí ô đất vừa click
+                const targetTile = intersects[0].object.parent; 
+                const targetPos = targetTile.position.clone();
+                
+                // Di chuyển mèo đến đó (nhấc chân lên 0.5 để không lún đất)
+                catModel.position.set(targetPos.x, 0.5, targetPos.z);
+                
+                // Thêm một chút hiệu ứng "nhìn về hướng đó"
+                catModel.lookAt(targetPos.x, 0.5, targetPos.z);
+            }
+        });
+
         function animate() {
             requestAnimationFrame(animate);
             renderer.render(scene, camera);
         }
         animate();
-
-        // Tự động căn chỉnh khi bác kéo to/nhỏ cửa sổ trình duyệt
-        window.addEventListener('resize', () => {
-            const aspect = window.innerWidth / window.innerHeight;
-            camera.left = -d * aspect; camera.right = d * aspect;
-            camera.top = d; camera.bottom = -d;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
-</body>
-</html>
