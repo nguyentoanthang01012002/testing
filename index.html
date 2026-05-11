@@ -2,39 +2,18 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Cat Island: Cloud Edition 🐾</title>
+    <title>Cat Island: Local Edition 🐾</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; }
-        #ui { 
-            position: absolute; top: 20px; left: 20px; 
-            color: white; font-family: sans-serif; 
-            font-size: 24px; font-weight: bold; 
-            text-shadow: 2px 2px 4px #000; pointer-events: none; 
-        }
-        #loading {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); color: white;
-            display: flex; justify-content: center; align-items: center;
-            font-family: sans-serif; z-index: 1000;
-        }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-family: sans-serif; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000; pointer-events: none; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 </head>
 <body>
-    <div id="loading">Mèo đang tải tài nguyên từ Google Drive... 🐾</div>
-    <div id="ui">Nông Trại Đảo Mèo (Cloud) 🐾☁️</div>
+    <div id="ui">Nông Trại Đảo Mèo 🐾</div>
 
     <script>
-        // --- ĐƯỜNG DẪN TRỰC TIẾP TỪ GOOGLE DRIVE CỦA BÁC ---
-        const URL_CAT_OBJ = 'https://drive.google.com/uc?export=download&id=1X1p5-q6H_x_Vv_6nU_O_S-Q0v_H-V-V_'; // PC0017.obj
-        const URL_CAT_TEX = 'https://drive.google.com/uc?export=download&id=1_V_V-Q0v_H-V-V_X1p5-q6H_x_Vv_6nU'; // PC0017_Tex.png
-        const URL_TILE_OBJ = 'https://drive.google.com/uc?export=download&id=1_V_V-Q0v_H-V-V_X1p5-q6H_x_Vv_6nU'; // TileTest3X3_02.obj
-        const URL_TILE_TEX = 'https://drive.google.com/uc?export=download&id=1_V_V-Q0v_H-V-V_X1p5-q6H_x_Vv_6nU'; // SandNoise02.png
-
-        // LƯU Ý KỸ THUẬT: Vì mã ID trong file ZIP lớn cần quyền truy cập API, 
-        // Nếu link trên báo lỗi "CORS", bác hãy kiểm tra lại quyền chia sẻ file trên Drive là "Bất kỳ ai có liên kết".
-
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
 
@@ -55,22 +34,13 @@
 
         const objLoader = new THREE.OBJLoader();
         const texLoader = new THREE.TextureLoader();
-        texLoader.setCrossOrigin('anonymous'); // Quan trọng để tải từ Drive
 
         const farmTiles = [];
         let catModel, targetPos;
-        let loadedCount = 0;
 
-        function checkLoading() {
-            loadedCount++;
-            if (loadedCount >= 2) { // Khi cả đất và mèo đã tải xong
-                document.getElementById('loading').style.display = 'none';
-            }
-        }
-
-        // --- TẢI Ô ĐẤT ---
-        const tileMat = new THREE.MeshLambertMaterial({ map: texLoader.load(URL_TILE_TEX) });
-        objLoader.load(URL_TILE_OBJ, (object) => {
+        // --- TẢI Ô ĐẤT (Lấy file trực tiếp từ GitHub) ---
+        const tileMat = new THREE.MeshLambertMaterial({ map: texLoader.load('SandNoise02.png') });
+        objLoader.load('TileTest3X3_02.obj', (object) => {
             const spacing = 4.5;
             for (let x = -1; x <= 1; x++) {
                 for (let z = -1; z <= 1; z++) {
@@ -82,21 +52,19 @@
                     farmTiles.push(tile);
                 }
             }
-            checkLoading();
         });
 
-        // --- TẢI MÈO ---
-        const catMat = new THREE.MeshLambertMaterial({ map: texLoader.load(URL_CAT_TEX) });
-        objLoader.load(URL_CAT_OBJ, (object) => {
+        // --- TẢI MÈO (Lấy file trực tiếp từ GitHub) ---
+        const catMat = new THREE.MeshLambertMaterial({ map: texLoader.load('PC0017_Tex.png') });
+        objLoader.load('PC0017.obj', (object) => {
             object.traverse(c => { if(c.isMesh) { c.material = catMat; c.castShadow = true; } });
             object.scale.set(2.5, 2.5, 2.5);
             object.position.set(0, 0.5, 0);
             catModel = object;
             scene.add(catModel);
-            checkLoading();
         });
 
-        // DI CHUYỂN
+        // LOGIC DI CHUYỂN
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         window.addEventListener('mousedown', (e) => {
@@ -115,8 +83,7 @@
         function animate() {
             requestAnimationFrame(animate);
             if (catModel && targetPos) {
-                const dist = catModel.position.distanceTo(targetPos);
-                if (dist > 0.1) {
+                if (catModel.position.distanceTo(targetPos) > 0.1) {
                     catModel.lookAt(targetPos.x, 0.5, targetPos.z);
                     catModel.position.lerp(targetPos, 0.1);
                 }
@@ -124,12 +91,6 @@
             renderer.render(scene, camera);
         }
         animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
