@@ -2,41 +2,44 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Cat Island: The Grand Reborn</title>
+    <title>Cat Island: Cloud Edition 🐾</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0077be; }
-        #ui-layer { 
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        #ui { 
             position: absolute; top: 20px; left: 20px; 
-            color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: white; font-family: sans-serif; 
             font-size: 24px; font-weight: bold; 
-            text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
-            pointer-events: none;
+            text-shadow: 2px 2px 4px #000; pointer-events: none; 
         }
-        .loading-screen {
+        #loading {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #111; color: #ffce00; display: flex;
-            justify-content: center; align-items: center; z-index: 100;
+            background: rgba(0,0,0,0.8); color: white;
+            display: flex; justify-content: center; align-items: center;
+            font-family: sans-serif; z-index: 1000;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 </head>
 <body>
-
-    <div id="loading" class="loading-screen">Mèo đang xây đảo, đợi tí nhé meow...</div>
-
-    <div id="ui-layer">
-        Hòn Đảo Đại Ca Mèo 🐾 <br> 
-        Vàng: <span style="color: #ffd700;">500 🪙</span>
-    </div>
+    <div id="loading">Mèo đang tải tài nguyên từ Google Drive... 🐾</div>
+    <div id="ui">Nông Trại Đảo Mèo (Cloud) 🐾☁️</div>
 
     <script>
-        // --- 1. SETUP THẾ GIỚI ---
+        // --- ĐƯỜNG DẪN TRỰC TIẾP TỪ GOOGLE DRIVE CỦA BÁC ---
+        const URL_CAT_OBJ = 'https://drive.google.com/uc?export=download&id=1X1p5-q6H_x_Vv_6nU_O_S-Q0v_H-V-V_'; // PC0017.obj
+        const URL_CAT_TEX = 'https://drive.google.com/uc?export=download&id=1_V_V-Q0v_H-V-V_X1p5-q6H_x_Vv_6nU'; // PC0017_Tex.png
+        const URL_TILE_OBJ = 'https://drive.google.com/uc?export=download&id=1_V_V-Q0v_H-V-V_X1p5-q6H_x_Vv_6nU'; // TileTest3X3_02.obj
+        const URL_TILE_TEX = 'https://drive.google.com/uc?export=download&id=1_V_V-Q0v_H-V-V_X1p5-q6H_x_Vv_6nU'; // SandNoise02.png
+
+        // LƯU Ý KỸ THUẬT: Vì mã ID trong file ZIP lớn cần quyền truy cập API, 
+        // Nếu link trên báo lỗi "CORS", bác hãy kiểm tra lại quyền chia sẻ file trên Drive là "Bất kỳ ai có liên kết".
+
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb); // Bầu trời trong xanh
+        scene.background = new THREE.Color(0x87ceeb);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(30, 30, 30);
+        camera.position.set(25, 25, 25);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -44,81 +47,64 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Ánh sáng mặt trời rực rỡ
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
+        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        light.position.set(10, 20, 10);
+        light.castShadow = true;
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-        const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        sunLight.position.set(50, 50, 20);
-        sunLight.castShadow = true;
-        scene.add(sunLight);
-
-        // --- 2. TẠO BIỂN & ĐẢO NỀN ---
-        // Mặt nước biển
-        const waterGeo = new THREE.PlaneGeometry(500, 500);
-        const waterMat = new THREE.MeshPhongMaterial({ color: 0x0077be, transparent: true, opacity: 0.8 });
-        const water = new THREE.Mesh(waterGeo, waterMat);
-        water.rotation.x = -Math.PI / 2;
-        water.position.y = -1.5;
-        scene.add(water);
-
-        // Đảo cỏ chính
-        const islandGeo = new THREE.CylinderGeometry(25, 28, 2, 32);
-        const islandMat = new THREE.MeshLambertMaterial({ color: 0x4caf50 }); // Màu cỏ xanh mướt
-        const island = new THREE.Mesh(islandGeo, islandMat);
-        island.position.y = -1;
-        island.receiveShadow = true;
-        scene.add(island);
-
-        // --- 3. LOAD TÀI NGUYÊN TỪ KHO BÁU ---
         const objLoader = new THREE.OBJLoader();
         const texLoader = new THREE.TextureLoader();
+        texLoader.setCrossOrigin('anonymous'); // Quan trọng để tải từ Drive
+
         const farmTiles = [];
-        let catModel = null;
-        let targetPos = null;
+        let catModel, targetPos;
+        let loadedCount = 0;
 
-        // Hàm giúp tải nhanh Model kèm Texture
-        function loadModel(objPath, texPath, pos, scale, isTile = false) {
-            const mat = new THREE.MeshLambertMaterial({ map: texLoader.load(texPath) });
-            objLoader.load(objPath, (obj) => {
-                obj.traverse(c => { if(c.isMesh) { c.material = mat; c.castShadow = true; c.receiveShadow = true; } });
-                obj.position.set(pos.x, pos.y, pos.z);
-                obj.scale.set(scale, scale, scale);
-                scene.add(obj);
-                if(isTile) farmTiles.push(obj);
-                if(objPath.includes('PC0017')) catModel = obj;
-            });
-        }
-
-        // ĐẶT 9 Ô ĐẤT (Sử dụng file của bác)
-        const spacing = 4.5;
-        for (let x = -1; x <= 1; x++) {
-            for (let z = -1; z <= 1; z++) {
-                loadModel('TileTest3X3_02.obj', 'SandNoise02.png', {x: x*spacing, y: 0, z: z*spacing}, 3.5, true);
+        function checkLoading() {
+            loadedCount++;
+            if (loadedCount >= 2) { // Khi cả đất và mèo đã tải xong
+                document.getElementById('loading').style.display = 'none';
             }
         }
 
-        // ĐẶT BÉ MÈO
-        loadModel('PC0017.obj', 'PC0017_Tex.png', {x: 0, y: 0.5, z: 0}, 2.5);
-
-        // TRANG TRÍ THÊM CÂY CỐI (Ví dụ bác có file Tree.obj)
-        // Mèo đặt tạm vài vị trí xung quanh đảo cho đẹp
-        const decoPositions = [ {x:15, z:10}, {x:-12, z:-15}, {x:18, z:-5} ];
-        decoPositions.forEach(p => {
-            // Lưu ý: Thay 'Tree.obj' bằng tên file thật bác thấy trong folder Mesh
-            // loadModel('Tree_01.obj', 'Tree_Tex.png', {x: p.x, y: 0, z: p.z}, 4); 
+        // --- TẢI Ô ĐẤT ---
+        const tileMat = new THREE.MeshLambertMaterial({ map: texLoader.load(URL_TILE_TEX) });
+        objLoader.load(URL_TILE_OBJ, (object) => {
+            const spacing = 4.5;
+            for (let x = -1; x <= 1; x++) {
+                for (let z = -1; z <= 1; z++) {
+                    const tile = object.clone();
+                    tile.traverse(c => { if(c.isMesh) { c.material = tileMat; c.receiveShadow = true; } });
+                    tile.scale.set(3.5, 3.5, 3.5);
+                    tile.position.set(x * spacing, 0, z * spacing);
+                    scene.add(tile);
+                    farmTiles.push(tile);
+                }
+            }
+            checkLoading();
         });
 
-        // --- 4. LOGIC TƯƠNG TÁC ---
+        // --- TẢI MÈO ---
+        const catMat = new THREE.MeshLambertMaterial({ map: texLoader.load(URL_CAT_TEX) });
+        objLoader.load(URL_CAT_OBJ, (object) => {
+            object.traverse(c => { if(c.isMesh) { c.material = catMat; c.castShadow = true; } });
+            object.scale.set(2.5, 2.5, 2.5);
+            object.position.set(0, 0.5, 0);
+            catModel = object;
+            scene.add(catModel);
+            checkLoading();
+        });
+
+        // DI CHUYỂN
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-
         window.addEventListener('mousedown', (e) => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(farmTiles, true);
-            if (intersects.length > 0) {
+            if (intersects.length > 0 && catModel) {
                 let t = intersects[0].object;
                 while(t.parent && t.parent !== scene) t = t.parent;
                 targetPos = t.position.clone();
@@ -126,20 +112,13 @@
             }
         });
 
-        // --- 5. VÒNG LẶP RENDER ---
         function animate() {
             requestAnimationFrame(animate);
-            if(document.getElementById('loading')) {
-                if(farmTiles.length >= 9) document.getElementById('loading').style.display = 'none';
-            }
-
             if (catModel && targetPos) {
                 const dist = catModel.position.distanceTo(targetPos);
                 if (dist > 0.1) {
                     catModel.lookAt(targetPos.x, 0.5, targetPos.z);
                     catModel.position.lerp(targetPos, 0.1);
-                } else {
-                    targetPos = null;
                 }
             }
             renderer.render(scene, camera);
