@@ -1,51 +1,71 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-    <title>Cat Farm 3D</title>
+    <meta charset="UTF-8">
+    <title>Cat Island: Reborn 3D</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: sans-serif; font-size: 20px; text-shadow: 2px 2px black; }
+        #ui-layer { 
+            position: absolute; top: 20px; left: 20px; 
+            color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            font-size: 24px; font-weight: bold; 
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none; /* Để không bị vướng click chuột vào game */
+        }
+        .coin-icon { color: #ffd700; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 </head>
 <body>
-    <div id="ui">Nông Trại Đảo Mèo 🐾 <br> Vàng: 100 🪙</div>
+
+    <div id="ui-layer">
+        Nông Trại Đảo Mèo 🐾 <br> 
+        Vàng: <span class="coin-icon">100 🪙</span>
+    </div>
+
     <script>
-        // 1. CÀI ĐẶT CƠ BẢN
+        // --- 1. KHỞI TẠO THẾ GIỚI 3D ---
         const scene = new THREE.Scene();
         const aspect = window.innerWidth / window.innerHeight;
-        const d = 15;
+        const d = 15; // Độ phóng đại camera
         const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
+        
+        // Đặt góc nhìn Isometric chuẩn game nông trại
         camera.position.set(20, 20, 20);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.DirectionalLight(0xffffff, 1.2);
-        light.position.set(10, 20, 10);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        // Ánh sáng mặt trời
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        sunLight.position.set(10, 20, 10);
+        scene.add(sunLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
-        // 2. TẢI TÀI NGUYÊN
+        // --- 2. QUẢN LÝ TÀI NGUYÊN ---
         const objLoader = new THREE.OBJLoader();
         const texLoader = new THREE.TextureLoader();
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
-        let catModel;
-        const farmTiles = []; 
+        let catModel = null;
+        let targetPosition = null;
+        const farmTiles = [];
+        const moveSpeed = 0.1; // Tốc độ di chuyển (0.1 = chậm, 0.5 = nhanh)
 
+        // Load Textures
         const groundTex = texLoader.load('SandNoise02.png');
         const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
         const catTex = texLoader.load('PC0017_Tex.png');
         const catMat = new THREE.MeshLambertMaterial({ map: catTex });
 
-        // --- TẠO LƯỚI ĐẤT 3x3 ---
+        // --- 3. TẠO LƯỚI ĐẤT 3x3 ---
         objLoader.load('TileTest3X3_02.obj', function (object) {
-            const spacing = 3.5; 
+            const spacing = 3.8; // Khoảng cách giữa các ô đất
             for (let x = -1; x <= 1; x++) {
                 for (let z = -1; z <= 1; z++) {
                     const tile = object.clone();
@@ -55,24 +75,25 @@
                     tile.scale.set(3, 3, 3);
                     tile.position.set(x * spacing, 0, z * spacing);
                     scene.add(tile);
-                    farmTiles.push(tile); 
+                    farmTiles.push(tile); // Lưu vào danh sách để bắt sự kiện Click
                 }
             }
         });
 
-        // --- TẢI MÈO ---
+        // --- 4. TẢI NHÂN VẬT MÈO ---
         objLoader.load('PC0017.obj', function (object) {
             object.traverse(function (child) {
                 if (child.isMesh) child.material = catMat;
             });
             object.scale.set(2, 2, 2);
-            object.position.set(0, 0.5, 0);
+            object.position.set(0, 0.5, 0); // Mèo đứng trên mặt đất một chút
             catModel = object;
             scene.add(catModel);
         });
 
-        // 3. CLICK ĐỂ DI CHUYỂN
+        // --- 5. XỬ LÝ TƯƠNG TÁC NGƯỜI CHƠI ---
         window.addEventListener('click', (event) => {
+            // Chuyển đổi tọa độ chuột sang không gian 3D
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -80,20 +101,49 @@
             const intersects = raycaster.intersectObjects(farmTiles, true);
 
             if (intersects.length > 0 && catModel) {
+                // Tìm Object cha (Tile) của Mesh vừa click trúng
                 let targetObj = intersects[0].object;
                 while(targetObj.parent && targetObj.parent !== scene) {
                     targetObj = targetObj.parent;
                 }
-                const targetPos = targetObj.position.clone();
-                catModel.position.set(targetPos.x, 0.5, targetPos.z);
-                catModel.lookAt(targetPos.x, 0.5, targetPos.z);
+                
+                // Thiết lập đích đến cho mèo
+                targetPosition = targetObj.position.clone();
+                targetPosition.y = 0.5; // Giữ độ cao cố định
             }
         });
 
+        // --- 6. VÒNG LẶP GAME (ANIMATION LOOP) ---
         function animate() {
             requestAnimationFrame(animate);
+
+            // Logic di chuyển mượt mà cho mèo
+            if (catModel && targetPosition) {
+                const distance = catModel.position.distanceTo(targetPosition);
+                
+                if (distance > 0.05) {
+                    // Xoay mặt mèo về phía mục tiêu
+                    catModel.lookAt(targetPosition.x, 0.5, targetPosition.z);
+                    
+                    // Di chuyển tịnh tiến dần dần (Lerp)
+                    catModel.position.lerp(targetPosition, moveSpeed);
+                } else {
+                    targetPosition = null; // Đã đến đích, dừng di chuyển
+                }
+            }
+
             renderer.render(scene, camera);
         }
+
+        // Xử lý khi đổi kích thước trình duyệt
+        window.addEventListener('resize', () => {
+            const aspect = window.innerWidth / window.innerHeight;
+            camera.left = -d * aspect;
+            camera.right = d * aspect;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
         animate();
     </script>
 </body>
