@@ -1,83 +1,100 @@
-// 1. CÀI ĐẶT CƠ BẢN
-const scene = new THREE.Scene();
-const aspect = window.innerWidth / window.innerHeight;
-const d = 15;
-const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
-camera.position.set(20, 20, 20);
-camera.lookAt(0, 0, 0);
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cat Farm 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: sans-serif; font-size: 20px; text-shadow: 2px 2px black; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+</head>
+<body>
+    <div id="ui">Nông Trại Đảo Mèo 🐾 <br> Vàng: 100 🪙</div>
+    <script>
+        // 1. CÀI ĐẶT CƠ BẢN
+        const scene = new THREE.Scene();
+        const aspect = window.innerWidth / window.innerHeight;
+        const d = 15;
+        const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 1000);
+        camera.position.set(20, 20, 20);
+        camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-const light = new THREE.DirectionalLight(0xffffff, 1.2);
-light.position.set(10, 20, 10);
-scene.add(light);
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        light.position.set(10, 20, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-// 2. TẢI TÀI NGUYÊN
-const objLoader = new THREE.OBJLoader();
-const texLoader = new THREE.TextureLoader();
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
+        // 2. TẢI TÀI NGUYÊN
+        const objLoader = new THREE.OBJLoader();
+        const texLoader = new THREE.TextureLoader();
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
-let catModel;
-const farmTiles = []; 
+        let catModel;
+        const farmTiles = []; 
 
-const groundTex = texLoader.load('SandNoise02.png');
-const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
-const catTex = texLoader.load('PC0017_Tex.png');
-const catMat = new THREE.MeshLambertMaterial({ map: catTex });
+        const groundTex = texLoader.load('SandNoise02.png');
+        const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
+        const catTex = texLoader.load('PC0017_Tex.png');
+        const catMat = new THREE.MeshLambertMaterial({ map: catTex });
 
-// --- TẠO LƯỚI ĐẤT 3x3 ---
-objLoader.load('TileTest3X3_02.obj', function (object) {
-    const spacing = 3.5; 
-    for (let x = -1; x <= 1; x++) {
-        for (let z = -1; z <= 1; z++) {
-            const tile = object.clone();
-            tile.traverse(function (child) {
-                if (child.isMesh) child.material = groundMat;
+        // --- TẠO LƯỚI ĐẤT 3x3 ---
+        objLoader.load('TileTest3X3_02.obj', function (object) {
+            const spacing = 3.5; 
+            for (let x = -1; x <= 1; x++) {
+                for (let z = -1; z <= 1; z++) {
+                    const tile = object.clone();
+                    tile.traverse(function (child) {
+                        if (child.isMesh) child.material = groundMat;
+                    });
+                    tile.scale.set(3, 3, 3);
+                    tile.position.set(x * spacing, 0, z * spacing);
+                    scene.add(tile);
+                    farmTiles.push(tile); 
+                }
+            }
+        });
+
+        // --- TẢI MÈO ---
+        objLoader.load('PC0017.obj', function (object) {
+            object.traverse(function (child) {
+                if (child.isMesh) child.material = catMat;
             });
-            tile.scale.set(3, 3, 3);
-            tile.position.set(x * spacing, 0, z * spacing);
-            scene.add(tile);
-            farmTiles.push(tile); 
+            object.scale.set(2, 2, 2);
+            object.position.set(0, 0.5, 0);
+            catModel = object;
+            scene.add(catModel);
+        });
+
+        // 3. CLICK ĐỂ DI CHUYỂN
+        window.addEventListener('click', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(farmTiles, true);
+
+            if (intersects.length > 0 && catModel) {
+                let targetObj = intersects[0].object;
+                while(targetObj.parent && targetObj.parent !== scene) {
+                    targetObj = targetObj.parent;
+                }
+                const targetPos = targetObj.position.clone();
+                catModel.position.set(targetPos.x, 0.5, targetPos.z);
+                catModel.lookAt(targetPos.x, 0.5, targetPos.z);
+            }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
         }
-    }
-});
-
-// --- TẢI MÈO ---
-objLoader.load('PC0017.obj', function (object) {
-    object.traverse(function (child) {
-        if (child.isMesh) child.material = catMat;
-    });
-    object.scale.set(2, 2, 2);
-    object.position.set(0, 0.5, 0);
-    catModel = object;
-    scene.add(catModel);
-});
-
-// 3. XỬ LÝ CLICK CHUỘT
-window.addEventListener('click', (event) => {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(farmTiles, true);
-
-    if (intersects.length > 0 && catModel) {
-        let targetObj = intersects[0].object;
-        while(targetObj.parent && targetObj.parent !== scene) {
-            targetObj = targetObj.parent;
-        }
-        const targetPos = targetObj.position.clone();
-        catModel.position.set(targetPos.x, 0.5, targetPos.z);
-        catModel.lookAt(targetPos.x, 0.5, targetPos.z);
-    }
-});
-
-function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-}
-animate();
+        animate();
+    </script>
+</body>
+</html>
